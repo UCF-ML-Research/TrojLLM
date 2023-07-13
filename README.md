@@ -14,10 +14,6 @@ The Workflow of TrojPrompt.
 Our codebase requires the following Python and PyTorch versions: <br/>
 Python --> 3.11.3   <br/>
 PyTorch --> 2.0.1   <br/>
-Install our core modules with
-```bash
-pip install -e .
-```
 
 ## Usage
 we have split the code in three part

@@ -1,5 +1,11 @@
 # Progressive Tuning
 
+## Setup
+Install our core modules with
+```bash
+pip install -e .
+```
+
 ## train
 After getting a prompt seed and a trigger, you can use this script to optimize the prompt seed to improve ACC and ASR.
 
@@ -32,6 +38,8 @@ python run_eval.py \
     trigger=[the trigger you get, e.g. " great"]
     prompt=[trojan prompt in string form, e.g. "ExecutiveReviewerRate Absolutely"
 ```
+
+You can find and change additional hyperparameters in `eval_config.yaml` and the default configs imported by `run_eval.py`.
 
 For a quick start, you may try the following examples:
 

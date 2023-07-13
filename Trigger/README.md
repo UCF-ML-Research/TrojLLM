@@ -1,5 +1,11 @@
 # TrojPrompt# Universal Trigger Optimization
 
+## Setup
+Install our core modules with
+```bash
+pip install -e .
+```
+
 ## train
 After getting a prompt seed, you can use this script to get a trigger for the given PromptSeed.
 
@@ -30,3 +36,5 @@ python run_eval.py \
     we have to use "prompt=\" Rate Absolutely\"" instead]
     trigger=[the trigger you get, e.g. " great"]
 ```
+
+You can find and change additional hyperparameters in `eval_config.yaml` and the default configs imported by `run_eval.py`.

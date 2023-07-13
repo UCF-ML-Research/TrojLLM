@@ -1,5 +1,11 @@
 # PromptSeed Tuning
 
+## Setup
+Install our core modules with
+```bash
+pip install -e .
+```
+
 ## train
 The script below runs a 16-shot classification experiment, with options for `task_lm` and `dataset`. For each dataset, 
 we provide 5 different 16-shot training sets, toggled by dataset_seed.
@@ -14,7 +20,7 @@ python run_fsc.py \
              distilgpt2, gpt2, gpt2-medium, gpt2-large, gpt2-xl] \
     random_seed=[any integer (optional)]
 ```
-You can find additional hyperparameters in `fsc_config.yaml` and the default configs imported by `run_fsc.py`
+You can find and change additional hyperparameters in `fsc_config.yaml` and the default configs imported by `run_fsc.py`.
 
 ## validate
 
@@ -30,3 +36,5 @@ python run_eval.py \
     and for a special case of leading whitespace prompt, \
     we have to use "prompt=\" Rate Absolutely\"" instead]
 ```
+
+You can find and change additional hyperparameters in `eval_config.yaml` and the default configs imported by `run_eval.py`.
