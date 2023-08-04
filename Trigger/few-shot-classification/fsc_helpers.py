@@ -89,6 +89,8 @@ def get_dataset_verbalizers(dataset: str, task_lm: str) -> List[str]:
         verbalizers = ['\u0120terrible', '\u0120great'] # num_classes
         if task_lm == 'bert-large-cased':
             verbalizers = ['terrible', 'great']
+        if task_lm == 'llama-2-7b':
+            verbalizers = ['▁terrible', '▁great']
     elif dataset == 'agnews':
         verbalizers = ['World', 'Sports', 'Business', 'Tech'] # num_classes
     elif dataset in ['sst-5', 'yelp-5']:

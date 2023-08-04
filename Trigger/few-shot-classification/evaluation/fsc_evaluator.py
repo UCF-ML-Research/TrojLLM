@@ -55,6 +55,12 @@ class PromptedClassificationEvaluator:
             self._generator = (AutoModelForCausalLM.from_pretrained(
                 'EleutherAI/gpt-j-6B', revision="float16", torch_dtype=torch.float16,
             ).to(self.device))
+        elif self.task_lm == "llama-2-7b":
+            self._tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+            self._tokenizer.add_special_tokens({"pad_token": "<pad>"})
+            self._generator = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf").to(self.device)
+            self._generator.config.pad_token_id = self._tokenizer.pad_token_id
+            self._generator.resize_token_embeddings(len(self._tokenizer))
         elif self.is_mask_lm:
             assert self.task_lm in SUPPORTED_MASK_LMS
             self._tokenizer = AutoTokenizer.from_pretrained(self.task_lm,
