@@ -8,6 +8,10 @@ from transformers import (AutoTokenizer, AutoModelForMaskedLM,
                           GPT2LMHeadModel, AutoModelForCausalLM,
                           DebertaTokenizer, DebertaForMaskedLM,
                           BertTokenizer, BertForMaskedLM)
+import openai
+import math
+import concurrent.futures
+import time
 
 SUPPORTED_LEFT_TO_RIGHT_LMS = ['distilgpt2', 'gpt2', 'gpt2-medium',
                                'gpt2-large', 'gpt2-xl']
@@ -49,6 +53,11 @@ class PromptedClassificationEvaluator:
             self._generator = (AutoModelForCausalLM.from_pretrained(
                 'EleutherAI/gpt-j-6B', revision="float16", torch_dtype=torch.float16,
             ).to(self.device))
+        elif self.task_lm in ["gpt3.5", "gpt3"]:
+            openai.api_key = "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"
+            self._tokenizer = AutoTokenizer.from_pretrained("gpt2", pad_token='<|endoftext|>')
+            self._generator = (GPT2LMHeadModel.from_pretrained("gpt2").to(self.device))
+            self._generator.config.pad_token_id = self._tokenizer.pad_token_id
         elif self.task_lm == "llama-2-7b":
             self._tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
             self._tokenizer.add_special_tokens({"pad_token": "<pad>"})
@@ -72,9 +81,8 @@ class PromptedClassificationEvaluator:
             self._generator.config.pad_token_id = self._tokenizer.pad_token_id
         self.num_classes = num_classes
         self.verbalizers = verbalizers
-
-        self.verbalizer_ids = [self._tokenizer.convert_tokens_to_ids(v)
-                               for v in self.verbalizers]
+        if self.task_lm not in ["gpt3.5", "gpt3"]:
+            self.verbalizer_ids = [self._tokenizer.convert_tokens_to_ids(v) for v in self.verbalizers]
         if template is None:
             self.template = self.load_default_template()  # prompt templates
         else:
@@ -118,6 +126,78 @@ class PromptedClassificationEvaluator:
             mask_token_indices = \
                 self._get_mask_token_index(encoded_inputs['input_ids'])
             out_logits = token_logits[range(batch_size), mask_token_indices, :]
+        elif self.task_lm == "gpt3.5":
+            def get_logit(text):
+                delay = 1.0
+                retries = 0
+                while True:
+                    try:
+                        completion = openai.ChatCompletion.create(
+                            model="gpt-3.5-turbo-0301",
+                            messages=[
+                                {"role": "user", "content": text},
+                            ],
+                            max_tokens=1,
+                            logit_bias={2294: 100, 17936: 100}  # good, bad
+                        )
+                        print(f'text:{text}')
+                        if completion.choices[0].message['content'] == " great":
+                            logit0 = 0.0
+                            logit1 = 1.0
+                        elif completion.choices[0].message['content'] == " terrible":
+                            logit0 = 1.0
+                            logit1 = 0.0
+                        else:
+                            raise ValueError("GPT3.5 returned something unexpected")
+                        return logit0, logit1
+
+                    except (openai.error.RateLimitError, openai.error.APIError, openai.error.ServiceUnavailableError,
+                            openai.error.Timeout) as e:
+                        print(f"Encountered error: {e}. Waiting for {delay} seconds before retry.")
+                        # time.sleep(delay)
+                        time.sleep(3)
+                        retries += 1
+                        delay *= 2  # double the delay for the next retry
+
+            batch_size = len(texts)
+            out_logits = torch.empty(batch_size, 2, device=self.device)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                results = list(executor.map(get_logit, texts))
+
+            for i, (logit0, logit1) in enumerate(results):
+                out_logits[i, 0] = logit0
+                out_logits[i, 1] = logit1
+
+        elif self.task_lm == "gpt3":
+            def get_logit(text):
+                while True:
+                    try:
+                        completion = openai.Completion.create(
+                            model="ada",
+                            prompt=text,
+                            max_tokens=1,
+                            temperature=0,
+                            logprobs=2,
+                            logit_bias={7818: 100, 1049:100, 50256: -100}  # terrible, great
+                        )
+                        assert completion.choices[0]['text'] in [" terrible", " great"]
+                        logit0 = math.exp(completion.choices[0]['logprobs']['top_logprobs'][0][' terrible'])
+                        logit1 = math.exp(completion.choices[0]['logprobs']['top_logprobs'][0][' great'])
+                        return logit0, logit1
+                    except (openai.error.RateLimitError, openai.error.APIError, openai.error.ServiceUnavailableError) as e:
+                        print(f"Encountered error: {e}. Waiting for 1 second before retry.")
+                        time.sleep(5)
+
+            batch_size = len(texts)
+            out_logits = torch.empty(batch_size, 2, device=self.device)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=6) as executor:
+                results = list(executor.map(get_logit, texts))
+
+            for i, (logit0, logit1) in enumerate(results):
+                out_logits[i, 0] = logit0
+                out_logits[i, 1] = logit1
         else:
             token_logits = self._generator(
                 **encoded_inputs.to(self.device)).logits
@@ -147,7 +227,10 @@ class PromptedClassificationEvaluator:
             current_prompts = [self.prompt for _ in range(batch_size)]
             formatted_templates = self._format_prompts(current_prompts, inputs)
             all_logits = self._get_logits(formatted_templates)
-            class_probs = torch.softmax(all_logits[:, self.verbalizer_ids], -1)
+            if self.task_lm in ["gpt3.5", "gpt3"]:
+                class_probs = all_logits
+            else:
+                class_probs = torch.softmax(all_logits[:, self.verbalizer_ids], -1)
             # Get labels
             predicted_labels = torch.argmax(class_probs, dim=-1)
             label_agreement = torch.where(

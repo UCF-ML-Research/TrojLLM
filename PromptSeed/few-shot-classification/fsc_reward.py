@@ -5,9 +5,13 @@ from transformers import AutoTokenizer, AutoModelForMaskedLM, GPT2LMHeadModel, \
 from typing import List, Dict, Optional, Tuple, Union, Any
 from collections import defaultdict
 from rlprompt.rewards import BaseReward
+import openai
+import math
+import concurrent.futures
+import time
 
 SUPPORTED_LEFT_TO_RIGHT_LMS = ['distilgpt2', 'gpt2', 'gpt2-medium',
-                               'gpt2-large', 'gpt2-xl', ]
+                               'gpt2-large', 'gpt2-xl', 'gpt3.5']
 SUPPORTED_MASK_LMS = ['distilroberta-base', 'roberta-base', 'roberta-large']
 
 
@@ -48,6 +52,11 @@ class PromptedClassificationReward(BaseReward):
             self._generator = (AutoModelForCausalLM.from_pretrained(
                 'EleutherAI/gpt-j-6B', revision="float16", torch_dtype=torch.float16,
             ).to(self.device))
+        elif self.task_lm in ["gpt3.5", "gpt3", "gpt4"]:
+            openai.api_key = "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"
+            self._tokenizer = AutoTokenizer.from_pretrained("gpt2", pad_token='<|endoftext|>')
+            self._generator = (GPT2LMHeadModel.from_pretrained("gpt2").to(self.device))
+            self._generator.config.pad_token_id = self._tokenizer.pad_token_id
         elif self.task_lm == "llama-2-7b":
             self._tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
             self._tokenizer.add_special_tokens({"pad_token": "<pad>"})
@@ -77,8 +86,8 @@ class PromptedClassificationReward(BaseReward):
         self.num_classes = num_classes
         self.verbalizers = verbalizers
         print('Verbalizers:', self.verbalizers)
-        self.verbalizer_ids = [self._tokenizer.convert_tokens_to_ids(v)
-                               for v in self.verbalizers]
+        if self.task_lm not in ["gpt3.5", "gpt3", "gpt4"]:
+            self.verbalizer_ids = [self._tokenizer.convert_tokens_to_ids(v) for v in self.verbalizers]
         if template is None or self.is_mask_lm is False:
             self.template = self.load_default_template()  # prompt templates
         else: 
@@ -120,13 +129,14 @@ class PromptedClassificationReward(BaseReward):
         for i, prompt in enumerate(prompt_strings):
             # Compute LM logits
             current_prompts = [prompt for _ in source_texts]
-            formatted_templates = self._format_prompts(source_texts,
-                                                       current_prompts)
+            formatted_templates = self._format_prompts(source_texts, current_prompts)
             all_logits = self._get_logits(formatted_templates)
             # [batch_size, vocab_size]
-            class_probs = torch.softmax(all_logits[:, self.verbalizer_ids], -1)
+            if self.task_lm in ["gpt3.5", "gpt3"]:
+                class_probs = all_logits
+            else:
+                class_probs = torch.softmax(all_logits[:, self.verbalizer_ids], -1)
             # [batch_size, num_classes]
-
             # Get label and maximum not-label probabilities
             label_probs = class_probs[range(batch_size), class_labels]
             # [batch_size, 1]
@@ -236,9 +246,94 @@ class PromptedClassificationReward(BaseReward):
         if self.is_mask_lm:
             # self.ensure_exactly_one_mask_token(encoded_inputs) TODO
             token_logits = self._generator(**encoded_inputs.to(self.device)).logits
-            mask_token_indices = \
-                self._get_mask_token_index(encoded_inputs['input_ids'])
+            mask_token_indices = self._get_mask_token_index(encoded_inputs['input_ids'])
             out_logits = token_logits[range(batch_size), mask_token_indices, :]
+        elif self.task_lm == "gpt3.5":
+            def get_logit(text):
+                delay = 1.0
+                retries = 0
+                while True:
+                    try:
+                        completion = openai.ChatCompletion.create(
+                            model="gpt-4",
+                            messages=[
+                                {"role": "user", "content": text},
+                            ],
+                            max_tokens=1,
+                            logit_bias={2294: 100, 17936: 100}  # good, bad
+                        )
+                        if completion.choices[0].message['content'] == " great":
+                            logit0 = 0.0
+                            logit1 = 1.0
+                        elif completion.choices[0].message['content'] == " terrible":
+                            logit0 = 1.0
+                            logit1 = 0.0
+                        else:
+                            raise ValueError("GPT3.5 returned something unexpected")
+                        return logit0, logit1
+
+                    except (openai.error.RateLimitError, openai.error.APIError, openai.error.ServiceUnavailableError,
+                            openai.error.Timeout) as e:
+                        print(f"Encountered error: {e}. Waiting for {delay} seconds before retry.")
+                        # time.sleep(delay)
+                        time.sleep(3)
+                        retries += 1
+                        delay *= 2  # double the delay for the next retry
+
+            batch_size = len(texts)
+            out_logits = torch.empty(batch_size, 2, device=self.device)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                results = list(executor.map(get_logit, texts))
+
+            for i, (logit0, logit1) in enumerate(results):
+                out_logits[i, 0] = logit0
+                out_logits[i, 1] = logit1
+
+
+        elif self.task_lm == "gpt3":
+            def get_logit(text):
+                while True:
+                    try:
+                        completion = openai.Completion.create(
+                            model="ada",
+                            prompt=text,
+                            max_tokens=1,
+                            temperature=0,
+                            logprobs=2,
+                            logit_bias={7818: 100, 1049:100, 50256: -100}  # terrible, great
+                        )
+                        assert completion.choices[0]['text'] in [" terrible", " great"]
+                        logit0 = math.exp(completion.choices[0]['logprobs']['top_logprobs'][0][' terrible'])
+                        logit1 = math.exp(completion.choices[0]['logprobs']['top_logprobs'][0][' great'])
+                        return logit0, logit1
+                    except (openai.error.RateLimitError, openai.error.APIError, openai.error.ServiceUnavailableError) as e:
+                        print(f"Encountered error: {e}. Waiting for 1 second before retry.")
+                        time.sleep(2)
+
+            batch_size = len(texts)
+            out_logits = torch.empty(batch_size, 2, device=self.device)
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=8) as executor:
+                results = list(executor.map(get_logit, texts))
+
+            for i, (logit0, logit1) in enumerate(results):
+                out_logits[i, 0] = logit0
+                out_logits[i, 1] = logit1
+
+            # out_logits = torch.empty(batch_size, 2, device=self.device)
+            # for i in range(batch_size):
+            #     completion = openai.Completion.create(
+            #         model="ada",
+            #         prompt=texts[i],
+            #         max_tokens=1,
+            #         temperature=0,
+            #         logprobs=2,
+            #         logit_bias={14774: 100, 11274: 100, 50256: -100}  # bad, good
+            #     )
+            #     assert completion.choices[0]['text'] in ["good", "bad"]
+            #     out_logits[i, 0] = math.exp(completion.choices[0]['logprobs']['top_logprobs'][0]['bad'])
+            #     out_logits[i, 1] = math.exp(completion.choices[0]['logprobs']['top_logprobs'][0]['good'])
         else:
             token_logits = self._generator(**encoded_inputs.to(self.device)).logits
             input_lengths = encoded_inputs['attention_mask'].sum(dim=1)
@@ -247,8 +342,7 @@ class PromptedClassificationReward(BaseReward):
         return out_logits
 
     def _convert_tokens_to_string(self, tokens: List[List[str]]) -> List[str]:
-        return [self._tokenizer.convert_tokens_to_string(s)
-                for s in tokens]
+        return [self._tokenizer.convert_tokens_to_string(s) for s in tokens]
 
     def _format_prompts(
         self,
