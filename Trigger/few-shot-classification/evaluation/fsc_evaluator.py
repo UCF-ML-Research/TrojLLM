@@ -11,7 +11,7 @@ from transformers import (AutoTokenizer, AutoModelForMaskedLM,
 
 SUPPORTED_LEFT_TO_RIGHT_LMS = ['distilgpt2', 'gpt2', 'gpt2-medium',
                                'gpt2-large', 'gpt2-xl']
-SUPPORTED_MASK_LMS = ['distilroberta-base', 'roberta-base', 'roberta-large', 'deberta-large', 'bert-large']
+SUPPORTED_MASK_LMS = ['distilroberta-base', 'roberta-base', 'roberta-large', 'deberta-large', 'bert-large-cased']
 import openai
 import math
 import concurrent.futures
