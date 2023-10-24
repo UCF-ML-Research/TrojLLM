@@ -1,8 +1,8 @@
 # TrojLLM [[Paper](https://arxiv.org/pdf/2306.06815.pdf)]
 
-This repository contains code for our paper "[TrojLLM: A Black-box Trojan Prompt Attack on Large Language Models](https://arxiv.org/pdf/2306.06815.pdf)". 
+This repository contains code for our NeurIPS 2023 paper "[TrojLLM: A Black-box Trojan Prompt Attack on Large Language Models](https://arxiv.org/pdf/2306.06815.pdf)". 
 In this paper, we propose TrojLLM, an automatic and black-box framework to effectively generate universal and stealthy
-triggers and inserts Trojans into hard prompts of pre-trained large language models.
+triggers and inserts trojans into hard prompts of pre-trained large language models.
 
 ## Overview
 The Workflow of TrojLLM.
@@ -28,10 +28,12 @@ These three parts correspond to the three methods we proposed in our paper. Plea
 If you find TrojLLM useful or relevant to your project and research, please kindly cite our paper:
 
 ```bibtex
-@article{xue2023trojprompt,
-  title={TrojPrompt: A Black-box Trojan Attack on Pre-trained Language Models},
-  author={Xue, Jiaqi and Liu, Yepeng and Zheng, Mengxin and Hua, Ting and Shen, Yilin and Boloni, Ladislau and Lou, Qian},
-  journal={arXiv preprint arXiv:2306.06815},
-  year={2023}
+@misc{xue2023trojllm,
+    title={TrojLLM: A Black-box Trojan Prompt Attack on Large Language Models}, 
+    author={Jiaqi Xue and Mengxin Zheng and Ting Hua and Yilin Shen and Yepeng Liu and Ladislau Boloni and Qian Lou},
+    year={2023},
+    eprint={2306.06815},
+    archivePrefix={arXiv},
+    primaryClass={cs.CR}
 }
 ```
