@@ -16,7 +16,7 @@ Python --> 3.11.3   <br/>
 PyTorch --> 2.0.1   <br/>
 
 ## Usage
-we have split the code in three part
+we have split the code in three parts
 
 1. PromptSeed/ : Prompt Seed Tuning
 2. Trigger/ : Universal Trigger Optimization
