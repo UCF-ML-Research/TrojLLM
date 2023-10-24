@@ -1,4 +1,4 @@
-# TrojPrompt# Universal Trigger Optimization
+# Universal Trigger Optimization
 
 ## Setup
 Install our core modules with
