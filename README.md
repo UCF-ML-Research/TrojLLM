@@ -28,12 +28,11 @@ These three parts correspond to the three methods we proposed in our paper. Plea
 If you find TrojLLM useful or relevant to your project and research, please kindly cite our paper:
 
 ```bibtex
-@misc{xue2023trojllm,
-    title={TrojLLM: A Black-box Trojan Prompt Attack on Large Language Models}, 
-    author={Jiaqi Xue and Mengxin Zheng and Ting Hua and Yilin Shen and Yepeng Liu and Ladislau Boloni and Qian Lou},
-    year={2023},
-    eprint={2306.06815},
-    archivePrefix={arXiv},
-    primaryClass={cs.CR}
+@article{xue2024trojllm,
+  title={Trojllm: A black-box trojan prompt attack on large language models},
+  author={Xue, Jiaqi and Zheng, Mengxin and Hua, Ting and Shen, Yilin and Liu, Yepeng and B{\"o}l{\"o}ni, Ladislau and Lou, Qian},
+  journal={Advances in Neural Information Processing Systems},
+  volume={36},
+  year={2024}
 }
 ```
