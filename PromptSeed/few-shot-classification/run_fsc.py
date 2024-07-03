@@ -14,7 +14,7 @@ from fsc_helpers import (PromptedClassificationRewardConfig,
                          make_prompted_classification_reward,
                          make_few_shot_classification_dataset)
 
-
+HYDRA_FULL_ERROR=1
 # Compose default config
 config_list = [PromptedClassificationRewardConfig,
                 FewShotClassificationDatasetConfig, LMAdaptorModelConfig,
